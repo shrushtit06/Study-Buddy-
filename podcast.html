@@ -1,0 +1,24 @@
+<div id="p"><div class="top"><button id="play">▶ Play</button><button id="stop">■ Stop</button>
+<label>Speed <select id="rate"><option value="0.9">0.9×</option><option value="1" selected>1×</option><option value="1.2">1.2×</option><option value="1.5">1.5×</option></select></label>
+<span id="hint">Click any line to jump to it. Uses your browser's built-in voices.</span></div><div id="t"></div></div>
+<style>*{box-sizing:border-box;font-family:Inter,system-ui,sans-serif}body{margin:0;color:#1e2a24}
+.top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+button{border:1px solid #e7e9e1;background:#fff;border-radius:10px;padding:9px 18px;font-size:13px;cursor:pointer}
+#play{background:#2f7d5b;border-color:#2f7d5b;color:#fff}select{padding:6px;border-radius:8px;border:1px solid #e7e9e1}
+label,#hint{font-size:12px;color:#6b7a72}#t{height:380px;overflow:auto;border:1px solid #e7e9e1;border-radius:14px;padding:10px;background:#fff}
+.l{padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.5;cursor:pointer;display:flex;gap:10px}
+.l b{min-width:48px;color:#2f7d5b}.l.b b{color:#3f7fd8}.l.on{background:#e6f2ea}</style>
+<script>
+const S=__DATA__;let i=0,playing=false;const $=id=>document.getElementById(id),T=$('t');
+T.innerHTML=S.map((s,k)=>'<div class="l '+(s.s==0?'a':'b')+'" data-k="'+k+'"><b>'+s.n+'</b><span>'+s.t.replace(/</g,'&lt;')+'</span></div>').join('');
+T.querySelectorAll('.l').forEach(el=>el.onclick=()=>{go(+el.dataset.k)});
+let voices=[];function load(){voices=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang))}load();speechSynthesis.onvoiceschanged=load;
+function voice(sp){if(!voices.length)return null;return voices[sp===0?0:Math.min(1,voices.length-1)]}
+function mark(k){T.querySelectorAll('.l').forEach((e,j)=>e.classList.toggle('on',j===k));const e=T.children[k];if(e)e.scrollIntoView({block:'nearest'})}
+function say(k){if(k>=S.length){halt();i=0;return}i=k;mark(k);const u=new SpeechSynthesisUtterance(S[k].t);const v=voice(S[k].s);if(v)u.voice=v;
+ u.pitch=S[k].s===0?1:0.8;u.rate=+$('rate').value;u.onend=()=>{if(playing)say(k+1)};speechSynthesis.cancel();speechSynthesis.speak(u)}
+function halt(){playing=false;speechSynthesis.cancel();$('play').textContent='▶ Play'}
+function go(k){playing=true;$('play').textContent='❚❚ Pause';say(k)}
+$('play').onclick=()=>{if(playing)halt();else go(i)};$('stop').onclick=()=>{halt();i=0;mark(-1)};
+if(!('speechSynthesis' in window))$('hint').textContent='Audio is not supported in this browser. You can still read the transcript.';
+</script>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;font-family:Inter,system-ui,sans-serif}
+body{margin:0;color:#1e2a24;background:transparent}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;border:1px solid #e7e9e1;border-radius:14px;padding:8px 10px;margin-bottom:10px}
+.grp{display:flex;gap:4px;align-items:center;padding-right:10px;border-right:1px solid #e7e9e1}.grp:last-child{border:0}
+button{border:1px solid #e7e9e1;background:#fff;border-radius:9px;padding:7px 11px;font-size:13px;cursor:pointer;color:#1e2a24}
+button:hover{border-color:#2f7d5b}button.on{background:#2f7d5b;border-color:#2f7d5b;color:#fff}
+button:focus-visible{outline:2px solid #2f7d5b;outline-offset:2px}
+.sw{width:24px;height:24px;border-radius:50%;padding:0;border:2px solid #fff;box-shadow:0 0 0 1px #cfd8d1}.sw.on{box-shadow:0 0 0 2px #2f7d5b}
+input[type=range]{width:90px;accent-color:#2f7d5b}
+.paper{border:1px solid #e7e9e1;border-radius:14px;overflow:hidden;background-color:#fff}
+.paper.lined{background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,#dce6de 31px,#dce6de 32px);background-position:0 8px}
+.paper.grid{background-image:linear-gradient(#e3ebe5 1px,transparent 1px),linear-gradient(90deg,#e3ebe5 1px,transparent 1px);background-size:32px 32px}
+canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
+</style></head><body>
+<div class="bar">
+ <div class="grp"><button id="pen" class="on" title="Pen">✎ Pen</button><button id="hi" title="Highlighter">▬ Highlighter</button><button id="er" title="Eraser">⌫ Eraser</button></div>
+ <div class="grp" id="colors"></div>
+ <div class="grp"><span style="font-size:12px;color:#6b7a72">Size</span><input id="size" type="range" min="1" max="12" value="3"></div>
+ <div class="grp"><button id="undo">↶ Undo</button><button id="redo">↷ Redo</button><button id="clear">Clear</button></div>
+</div>
+<div id="paper" class="paper lined"><canvas id="c" width="1000" height="560"></canvas></div>
+<script>
+const COLORS=['#1e2a24','#2f7d5b','#3f7fd8','#d9534f','#e08a1e','#7b4fd0'];
+const cv=document.getElementById('c'),ctx=cv.getContext('2d',{willReadFrequently:true});
+let tool='pen',color=COLORS[0],size=3,drawing=false,pts=[],snap=null,undo=[],redo=[],lastInit=null;
+ctx.lineCap='round';ctx.lineJoin='round';
+const $=id=>document.getElementById(id);
+function post(type,d){window.parent.postMessage(Object.assign({isStreamlitMessage:true,type},d||{}),'*')}
+function height(){post('streamlit:setFrameHeight',{height:document.body.scrollHeight+6})}
+COLORS.forEach((c,i)=>{const b=document.createElement('button');b.className='sw'+(i?'':' on');b.style.background=c;b.title='Colour';
+ b.onclick=()=>{color=c;document.querySelectorAll('.sw').forEach(x=>x.classList.remove('on'));b.classList.add('on');if(tool==='er')setTool('pen')};$('colors').appendChild(b)});
+function setTool(t){tool=t;['pen','hi','er'].forEach(k=>$(k).classList.toggle('on',k===t))}
+$('pen').onclick=()=>setTool('pen');$('hi').onclick=()=>setTool('hi');$('er').onclick=()=>setTool('er');
+$('size').oninput=e=>size=+e.target.value;
+function pos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*cv.width/r.width,y:(e.clientY-r.top)*cv.height/r.height,p:e.pointerType==='pen'&&e.pressure?e.pressure:0.5,pen:e.pointerType==='pen'}}
+function snapshot(){try{return ctx.getImageData(0,0,cv.width,cv.height)}catch(e){return null}}
+function pushUndo(){const s=snapshot();if(s){undo.push(s);if(undo.length>25)undo.shift();redo=[]}}
+cv.addEventListener('pointerdown',e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);pushUndo();drawing=true;const p=pos(e);pts=[p];snap=snapshot();
+ if(tool!=='hi')seg(p,p)});
+cv.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
+ for(const ev of (evs.length?evs:[e])){const p=pos(ev),last=pts[pts.length-1];pts.push(p);if(tool==='hi')hiDraw();else seg(last,p)}});
+function end(e){if(!drawing)return;drawing=false;exportInk()}
+cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+function seg(a,b){ctx.save();
+ if(tool==='er'){ctx.globalCompositeOperation='destination-out';ctx.lineWidth=size*4}
+ else{ctx.strokeStyle=color;ctx.lineWidth=b.pen?size*(0.4+1.2*b.p):size}
+ ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.restore()}
+function hiDraw(){if(snap)ctx.putImageData(snap,0,0);ctx.save();ctx.globalAlpha=.35;ctx.strokeStyle=color;ctx.lineWidth=size*3.5;ctx.lineCap='butt';
+ ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();ctx.restore()}
+function blank(){const d=ctx.getImageData(0,0,cv.width,cv.height).data;for(let i=3;i<d.length;i+=4)if(d[i])return false;return true}
+function exportInk(){post('streamlit:setComponentValue',{value:blank()?'':cv.toDataURL('image/png'),dataType:'json'})}
+$('undo').onclick=()=>{if(!undo.length)return;redo.push(snapshot());ctx.putImageData(undo.pop(),0,0);exportInk()};
+$('redo').onclick=()=>{if(!redo.length)return;undo.push(snapshot());ctx.putImageData(redo.pop(),0,0);exportInk()};
+$('clear').onclick=()=>{pushUndo();ctx.clearRect(0,0,cv.width,cv.height);exportInk()};
+function loadInitial(src){ctx.clearRect(0,0,cv.width,cv.height);undo=[];redo=[];if(!src)return;const im=new Image();im.onload=()=>ctx.drawImage(im,0,0);im.src=src}
+window.addEventListener('message',e=>{if(e.data.type!=='streamlit:render')return;const a=e.data.args||{};
+ $('paper').className='paper '+String(a.paper||'Lined').toLowerCase();
+ if(a.initial!==lastInit){lastInit=a.initial;loadInitial(a.initial)}height()});
+post('streamlit:componentReady',{apiVersion:1});height();
+</script></body></html>

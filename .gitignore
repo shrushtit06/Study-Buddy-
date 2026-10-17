@@ -1,0 +1,7 @@
+.streamlit/secrets.toml
+study_buddy_files/
+study_buddy_ink/
+study_buddy_data.json
+__pycache__/
+study_buddy_users.json
+study_buddy_data_*.json
